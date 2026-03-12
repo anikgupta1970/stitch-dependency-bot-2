@@ -3,7 +3,7 @@
     {
       "name": "stitch-jbi",
       "property": "stitch.jbi.version",
-      "version": "1",
+      "version": "0",
       "repos": [
         "stitch-processing",
         "stitch-workflow"
@@ -12,7 +12,7 @@
     {
       "name": "stitch-jbi-interface",
       "property": "stitch.jbi.interface.version",
-      "version": "1",
+      "version": "0",
       "repos": [
         "stitch-processing",
         "stitch-workflow"
