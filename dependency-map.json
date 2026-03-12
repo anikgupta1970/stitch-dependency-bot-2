@@ -3,14 +3,16 @@
     {
       "name": "stitch-jbi",
       "property": "stitch.jbi.version",
+      "version": "2.2",
       "repos": [
         "stitch-processing",
         "stitch-workflow"
       ]
     },
     {
-      "name": "stitch-dependency-bot",
+      "name": "stitch-jbi-interface",
       "property": "stitch.jbi.interface.version",
+      "version": "3.4",
       "repos": [
         "stitch-processing",
         "stitch-workflow"
