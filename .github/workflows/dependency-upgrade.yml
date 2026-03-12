@@ -42,6 +42,14 @@ jobs:
 
     steps:
 
+      # IMPORTANT: checkout the repo that contains dependency-versions.json
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install jq -y
+
       - name: Configure Git Authentication
         run: |
           git config --global url."https://x-access-token:${{ secrets.DOWNSTREAM_PAT }}@github.com/".insteadOf "https://github.com/"
@@ -57,14 +65,12 @@ jobs:
 
           CHANGED=false
 
-          jq -c '.dependencies[]' ../dependency-versions.json | while read dep; do
+          for dep in $(jq -c '.dependencies[]' $GITHUB_WORKSPACE/dependency-versions.json); do
 
             PROP=$(echo $dep | jq -r '.property')
             VER=$(echo $dep | jq -r '.version')
 
-            MATCH=$(echo $dep | jq -r '.repos[]' | grep -w "${{ matrix.repo }}" || true)
-
-            if [ ! -z "$MATCH" ]; then
+            if echo $dep | jq -r '.repos[]' | grep -q "^${{ matrix.repo }}$"; then
 
               echo "Updating $PROP to $VER"
 
@@ -92,7 +98,9 @@ jobs:
           git config user.name "dependency-bot"
           git config user.email "bot@company.com"
 
-          git commit -am "chore: upgrade dependencies" || echo "Nothing to commit"
+          git add .
+
+          git commit -m "chore: upgrade dependencies" || echo "Nothing to commit"
 
           git push origin HEAD --force
 
@@ -108,4 +116,5 @@ jobs:
             --title "Upgrade dependencies" \
             --body "Automated dependency upgrade" \
             --base main \
-            --head chore/upgrade-dependencies || echo "PR already exists"
+            --head chore/upgrade-dependencies \
+            || echo "PR already exists"
