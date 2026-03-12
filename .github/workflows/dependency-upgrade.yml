@@ -1,0 +1,90 @@
+name: Auto Dependency Upgrade
+
+on:
+  repository_dispatch:
+    types: [dependency-release]
+
+jobs:
+
+  load-config:
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
+      - id: matrix
+        run: |
+
+          DEP=${{ github.event.client_payload.dependency }}
+          VERSION=${{ github.event.client_payload.version }}
+
+          MATRIX=$(jq -c \
+            --arg dep "$DEP" \
+            --arg version "$VERSION" \
+            '
+            .dependencies[]
+            | select(.name==$dep)
+            | .repos[]
+            | {repo: ., property: .property, version: $version}
+            ' dependency-map.json \
+            | jq -s '{include:.}')
+
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  upgrade:
+
+    needs: load-config
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix: ${{ fromJson(needs.load-config.outputs.matrix) }}
+
+    steps:
+
+      - name: Configure Git Authentication
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.DOWNSTREAM_PAT }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Clone repository
+        run: |
+          git clone https://github.com/anikgupta1970/${{ matrix.repo }}.git
+          cd ${{ matrix.repo }}
+
+      - name: Update Maven property
+        run: |
+          cd ${{ matrix.repo }}
+
+          mvn versions:set-property \
+            -Dproperty=${{ matrix.property }} \
+            -DnewVersion=${{ matrix.version }} \
+            -DgenerateBackupPoms=false
+
+      - name: Commit changes
+        run: |
+          cd ${{ matrix.repo }}
+
+          git checkout -b chore/upgrade-${{ matrix.property }}-${{ matrix.version }}
+
+          git config user.name "dependency-bot"
+          git config user.email "bot@company.com"
+
+          git commit -am "chore: upgrade ${{ matrix.property }} to ${{ matrix.version }}"
+          git push origin HEAD
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_PAT }}
+        run: |
+          cd ${{ matrix.repo }}
+
+          gh pr create \
+            --title "Upgrade ${{ matrix.property }} to ${{ matrix.version }}" \
+            --body "Automated dependency upgrade"
