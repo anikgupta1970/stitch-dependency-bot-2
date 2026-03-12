@@ -1,7 +1,7 @@
 {
   "dependencies": [
     {
-      "name": "stitch-jbi",
+      "name": "jbi-version-upgrade",
       "property": "stitch.jbi.version",
       "version": "0",
       "repos": [
@@ -10,12 +10,11 @@
       ]
     },
     {
-      "name": "stitch-jbi-interface",
+      "name": "jbi-interface-version-upgrade",
       "property": "stitch.jbi.interface.version",
       "version": "0",
       "repos": [
-        "stitch-processing",
-        "stitch-workflow"
+        "stitch-processing"
       ]
     }
   ]
