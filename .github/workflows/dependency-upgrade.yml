@@ -8,7 +8,6 @@ jobs:
   build-matrix:
 
     runs-on: ubuntu-latest
-
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
 
@@ -24,14 +23,11 @@ jobs:
 
           MATRIX=$(jq -c '
             [
-              .dependencies[] as $d
-              | $d.repos[]
-              | {
-                  repo: .,
-                  property: $d.property,
-                  version: $d.version
-                }
-            ] | {include:.}
+              .dependencies[].repos[]
+            ]
+            | unique
+            | map({repo:.})
+            | {include:.}
           ' dependency-versions.json)
 
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
@@ -46,42 +42,70 @@ jobs:
 
     steps:
 
-      - name: Configure Git Auth
+      - name: Configure Git Authentication
         run: |
           git config --global url."https://x-access-token:${{ secrets.DOWNSTREAM_PAT }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Clone repo
+      - name: Clone repository
         run: |
           git clone https://github.com/anikgupta1970/${{ matrix.repo }}.git
 
-      - name: Update dependency
+      - name: Update dependencies
         run: |
+
           cd ${{ matrix.repo }}
 
-          mvn versions:set-property \
-            -Dproperty=${{ matrix.property }} \
-            -DnewVersion=${{ matrix.version }} \
-            -DgenerateBackupPoms=false
+          CHANGED=false
+
+          jq -c '.dependencies[]' ../dependency-versions.json | while read dep; do
+
+            PROP=$(echo $dep | jq -r '.property')
+            VER=$(echo $dep | jq -r '.version')
+
+            MATCH=$(echo $dep | jq -r '.repos[]' | grep -w "${{ matrix.repo }}" || true)
+
+            if [ ! -z "$MATCH" ]; then
+
+              echo "Updating $PROP to $VER"
+
+              mvn versions:set-property \
+                -Dproperty=$PROP \
+                -DnewVersion=$VER \
+                -DgenerateBackupPoms=false
+
+              CHANGED=true
+
+            fi
+
+          done
+
+          echo "changed=$CHANGED" >> $GITHUB_ENV
 
       - name: Commit changes
+        if: env.changed == 'true'
         run: |
+
           cd ${{ matrix.repo }}
 
-          git checkout -b chore/upgrade-${{ matrix.property }}-${{ matrix.version }}
+          git checkout -b chore/upgrade-dependencies || git checkout chore/upgrade-dependencies
 
           git config user.name "dependency-bot"
           git config user.email "bot@company.com"
 
-          git commit -am "chore: upgrade ${{ matrix.property }} to ${{ matrix.version }}" || echo "No changes"
+          git commit -am "chore: upgrade dependencies" || echo "Nothing to commit"
 
-          git push origin HEAD
+          git push origin HEAD --force
 
-      - name: Create PR
+      - name: Create Pull Request
+        if: env.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.DOWNSTREAM_PAT }}
         run: |
+
           cd ${{ matrix.repo }}
 
           gh pr create \
-            --title "Upgrade ${{ matrix.property }} to ${{ matrix.version }}" \
-            --body "Automated dependency upgrade"
+            --title "Upgrade dependencies" \
+            --body "Automated dependency upgrade" \
+            --base main \
+            --head chore/upgrade-dependencies || echo "PR already exists"
