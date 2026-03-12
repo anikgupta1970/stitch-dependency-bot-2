@@ -1,21 +1,11 @@
-name: Auto Dependency Upgrade
+name: Dependency Upgrade Bot
 
 on:
   workflow_dispatch:
-    inputs:
-      dependency:
-        description: "Dependency name (example: stitch-jbi)"
-        required: true
-      version:
-        description: "Version to upgrade"
-        required: true
-
-  repository_dispatch:
-    types: [dependency-release]
 
 jobs:
 
-  load-config:
+  build-matrix:
 
     runs-on: ubuntu-latest
 
@@ -24,61 +14,47 @@ jobs:
 
     steps:
 
-      - name: Checkout bot repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install jq
-        run: sudo apt-get update && sudo apt-get install jq -y
+        run: sudo apt-get install jq -y
 
       - id: matrix
         run: |
 
-          DEP=${{ inputs.dependency || github.event.client_payload.dependency }}
-          VERSION=${{ inputs.version || github.event.client_payload.version }}
-
-          echo "Dependency: $DEP"
-          echo "Version: $VERSION"
-
-          MATRIX=$(jq -c \
-            --arg dep "$DEP" \
-            --arg version "$VERSION" \
-            '
-            .dependencies[]
-            | select(.name==$dep)
-            | . as $d
-            | $d.repos[]
-            | {repo: ., property: $d.property, version: $version}
-            ' dependency-map.json \
-            | jq -s '{include:.}')
-
-          echo "Matrix: $MATRIX"
+          MATRIX=$(jq -c '
+            [
+              .dependencies[] as $d
+              | $d.repos[]
+              | {
+                  repo: .,
+                  property: $d.property,
+                  version: $d.version
+                }
+            ] | {include:.}
+          ' dependency-versions.json)
 
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
-
   upgrade:
 
-    needs: load-config
+    needs: build-matrix
     runs-on: ubuntu-latest
 
     strategy:
-      matrix: ${{ fromJson(needs.load-config.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.build-matrix.outputs.matrix) }}
 
     steps:
 
-      - name: Configure Git Authentication
+      - name: Configure Git Auth
         run: |
           git config --global url."https://x-access-token:${{ secrets.DOWNSTREAM_PAT }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Install GitHub CLI
-        run: sudo apt-get update && sudo apt-get install gh -y
-
-      - name: Clone repository
+      - name: Clone repo
         run: |
           git clone https://github.com/anikgupta1970/${{ matrix.repo }}.git
-          cd ${{ matrix.repo }}
 
-      - name: Update Maven property
+      - name: Update dependency
         run: |
           cd ${{ matrix.repo }}
 
@@ -87,7 +63,7 @@ jobs:
             -DnewVersion=${{ matrix.version }} \
             -DgenerateBackupPoms=false
 
-      - name: Commit changes
+      - name: Commit
         run: |
           cd ${{ matrix.repo }}
 
@@ -96,11 +72,11 @@ jobs:
           git config user.name "dependency-bot"
           git config user.email "bot@company.com"
 
-          git commit -am "chore: upgrade ${{ matrix.property }} to ${{ matrix.version }}" || echo "No changes to commit"
+          git commit -am "chore: upgrade ${{ matrix.property }} to ${{ matrix.version }}" || echo "No changes"
 
           git push origin HEAD
 
-      - name: Create Pull Request
+      - name: Create PR
         env:
           GH_TOKEN: ${{ secrets.DOWNSTREAM_PAT }}
         run: |
@@ -108,4 +84,4 @@ jobs:
 
           gh pr create \
             --title "Upgrade ${{ matrix.property }} to ${{ matrix.version }}" \
-            --body "Automated dependency upgrade by stitch-dependency-bot"
+            --body "Automated dependency upgrade"
