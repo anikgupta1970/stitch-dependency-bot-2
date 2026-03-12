@@ -63,7 +63,7 @@ jobs:
             -DnewVersion=${{ matrix.version }} \
             -DgenerateBackupPoms=false
 
-      - name: Commit
+      - name: Commit changes
         run: |
           cd ${{ matrix.repo }}
 
