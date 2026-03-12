@@ -5,16 +5,15 @@
       "property": "stitch.jbi.version",
       "repos": [
         "stitch-processing",
-        "stitch-workflow",
-        "deliveryboy"
+        "stitch-workflow"
       ]
     },
     {
-      "name": "stitch-jbi-interface",
+      "name": "stitch-dependency-bot",
       "property": "stitch.jbi.interface.version",
       "repos": [
         "stitch-processing",
-        "stitch-core"
+        "stitch-workflow"
       ]
     }
   ]
